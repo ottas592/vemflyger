@@ -56,7 +56,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background:rep
 </main>
 <script>
 (()=>{'use strict';
-const CENTER={lat:59.583857,lon:17.793495},MAX_KM=5,RADIUS_NM=2.7,REFRESH=15000;
+const CENTER={lat:59.599691,lon:17.878089},MAX_KM=5,RADIUS_NM=2.7,REFRESH=15000;
 const POSITION_API=`https://api.airplanes.live/v2/point/${CENTER.lat}/${CENTER.lon}/${RADIUS_NM}`;
 const $=id=>document.getElementById(id);let lastRouteKey='',currentAdsbCallsign='';
 function rad(v){return v*Math.PI/180}function dist(a,b,c,d){const R=6371.0088,x=rad(c-a),y=rad(d-b),q=Math.sin(x/2)**2+Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(y/2)**2;return 2*R*Math.asin(Math.sqrt(q))}
