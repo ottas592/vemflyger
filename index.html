@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07111f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vemflyger">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>Flight Wall – 5 km</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#07111f;
+  --panel:rgba(15,31,51,.92);
+  --line:rgba(255,255,255,.13);
+  --muted:#9fb1c8;
+  --text:#f5f8fc;
+  --accent:#7dd3fc;
+  --accent2:#c4b5fd;
+}
+*{box-sizing:border-box}html,body{height:100%}
+body{
+  margin:0;
+  background:
+    radial-gradient(circle at 20% 15%,rgba(14,165,233,.18),transparent 34rem),
+    radial-gradient(circle at 85% 75%,rgba(99,102,241,.14),transparent 32rem),
+    var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  display:grid;
+  place-items:center;
+  padding:24px;
+}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(to bottom,rgba(255,255,255,.018) 0,rgba(255,255,255,.018) 1px,transparent 1px,transparent 5px)}
+.wall{width:min(980px,100%);background:var(--panel);border:1px solid var(--line);border-radius:28px;box-shadow:0 24px 80px rgba(0,0,0,.32);backdrop-filter:blur(14px);padding:clamp(22px,4vw,42px)}
+#content{display:none}.hero{display:grid;grid-template-columns:1fr 190px;gap:22px;align-items:center}.callsign{font-size:clamp(48px,11vw,110px);font-weight:800;line-height:.88;letter-spacing:.03em}.airline{margin-top:14px;color:var(--accent);font-size:clamp(18px,3vw,30px);min-height:1.2em}.planeWrap{display:grid;place-items:center;min-height:170px}.plane{width:120px;height:120px;transform:rotate(var(--track,0deg));transition:transform .6s linear;filter:drop-shadow(0 10px 22px rgba(125,211,252,.25))}
+.plane svg{width:100%;height:100%;fill:var(--accent);shape-rendering:crispEdges}.route{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:20px 0;margin:22px 0}.airport{text-align:center}.code{font-size:clamp(34px,7vw,68px);font-weight:800}.city{color:var(--muted);font-size:14px;margin-top:5px}.arrow{font-size:clamp(28px,5vw,52px);color:var(--accent2)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.metric{border:1px solid var(--line);border-radius:18px;padding:16px;min-height:96px;background:rgba(255,255,255,.025)}.label{color:var(--muted);font-size:12px;letter-spacing:.08em}.value{font-size:clamp(20px,3vw,34px);font-weight:700;margin-top:10px}.refreshWrap{display:flex;justify-content:flex-end;margin-top:12px}.btn{width:34px;height:34px;display:grid;place-items:center;font:inherit;font-size:18px;line-height:1;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:50%;padding:0;cursor:pointer}.btn:hover{color:var(--text);background:rgba(255,255,255,.06)}
+@media(max-width:700px){body{padding:15px}.hero{grid-template-columns:1fr 110px}.planeWrap{min-height:110px}.plane{width:90px;height:90px}.metrics{grid-template-columns:1fr 1fr}.route{gap:8px}.wall{padding:20px}}
+</style>
+</head>
+<body>
+<main class="wall">
+  <section id="content">
+    <div class="hero"><div><div id="callsign" class="callsign">---</div><div id="airline" class="airline"></div></div><div class="planeWrap"><div id="plane" class="plane" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M15 1h2l2 11 10 4v3l-10-2-1 8 4 3v2l-6-2-6 2v-2l4-3-1-8-10 2v-3l10-4z"/></svg></div></div></div>
+    <div id="route" class="route" style="display:none"><div class="airport"><div id="originCode" class="code">---</div><div id="originCity" class="city"></div></div><div class="arrow">▶</div><div class="airport"><div id="destinationCode" class="code">---</div><div id="destinationCity" class="city"></div></div></div>
+    <div class="metrics"><div class="metric"><div class="label">AVSTÅND</div><div id="distance" class="value">-</div></div><div class="metric"><div class="label">HÖJD</div><div id="altitude" class="value">-</div></div><div class="metric"><div class="label">HASTIGHET</div><div id="speed" class="value">-</div></div><div class="metric"><div class="label">KURS</div><div id="heading" class="value">-</div></div></div>
+    <div class="refreshWrap"><button id="refresh" class="btn" aria-label="Uppdatera" title="Uppdatera">↻</button></div>
+  </section>
+  <div id="empty"></div>
+</main>
+<script>
+(()=>{'use strict';
+const CENTER={lat:59.526429,lon:17.894178},MAX_KM=5,RADIUS_NM=2.7,REFRESH=15000;
+const POSITION_API=`https://api.airplanes.live/v2/point/${CENTER.lat}/${CENTER.lon}/${RADIUS_NM}`;
+const $=id=>document.getElementById(id);let lastRouteKey='',currentAdsbCallsign='';
+function rad(v){return v*Math.PI/180}function dist(a,b,c,d){const R=6371.0088,x=rad(c-a),y=rad(d-b),q=Math.sin(x/2)**2+Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(y/2)**2;return 2*R*Math.asin(Math.sqrt(q))}
+function clean(v){return typeof v==='string'?v.trim():v}function dir(d){if(!Number.isFinite(d))return '-';return ['N','NÖ','Ö','SÖ','S','SV','V','NV'][Math.round((((d%360)+360)%360)/45)%8]}
+function resetRoute(){$('route').style.display='none';$('airline').textContent=''}
+async function enrich(callsign){resetRoute();if(!callsign)return;const key=callsign.replace(/\s+/g,'').toUpperCase();if(!key)return;lastRouteKey=key;try{const r=await fetch(`https://api.adsbdb.com/v0/callsign/${encodeURIComponent(key)}`,{cache:'no-store'});if(!r.ok)return;const j=await r.json(),f=j?.response?.flightroute;if(!f||lastRouteKey!==key)return;const airline=f.airline;const publicFlight=clean(f.callsign_iata);const icaoFlight=clean(f.callsign_icao)||key;if(publicFlight)$('callsign').textContent=publicFlight;$('airline').textContent=airline?.name||'';if(f.origin&&f.destination){$('originCode').textContent=f.origin.iata_code||f.origin.icao_code||'---';$('originCity').textContent=f.origin.municipality||f.origin.name||'';$('destinationCode').textContent=f.destination.iata_code||f.destination.icao_code||'---';$('destinationCity').textContent=f.destination.municipality||f.destination.name||'';$('route').style.display='grid'}}catch(e){console.warn('Ruttdata saknas',e)}}
+function show(a){$('content').style.display='block';$('empty').style.display='none';const cs=clean(a.flight)||clean(a.r)||a.hex?.toUpperCase()||'UNKNOWN';currentAdsbCallsign=cs;window.currentAircraftType=clean(a.t)||'';window.currentRegistration=clean(a.r)||'';$('callsign').textContent=cs;const ft=typeof a.alt_baro==='number'?a.alt_baro:(typeof a.alt_geom==='number'?a.alt_geom:null),m=ft==null?null:Math.round(ft*.3048/10)*10,kmh=Number.isFinite(a.gs)?Math.round(a.gs*1.852):null,t=Number.isFinite(a.track)?a.track:null;$('distance').textContent=a._km.toFixed(1).replace('.',',')+' KM';$('altitude').textContent=a.alt_baro==='ground'?'MARK':m==null?'-':m.toLocaleString('sv-SE')+' M';$('speed').textContent=kmh==null?'-':kmh+' KM/H';$('heading').textContent=t==null?'-':dir(t)+' '+Math.round(t)+'°';$('plane').style.setProperty('--track',(t??0)+'deg');enrich(clean(a.flight))}
+function empty(){$('content').style.display='none';$('empty').style.display='block';$('empty').textContent=''}
+async function update(){$('refresh').disabled=true;try{const r=await fetch(POSITION_API,{cache:'no-store'});if(!r.ok)throw Error(r.status);const j=await r.json(),list=Array.isArray(j.ac)?j.ac:(Array.isArray(j.aircraft)?j.aircraft:[]),near=list.filter(a=>Number.isFinite(a.lat)&&Number.isFinite(a.lon)).map(a=>({...a,_km:dist(CENTER.lat,CENTER.lon,a.lat,a.lon)})).filter(a=>a._km<=MAX_KM).sort((a,b)=>a._km-b._km);near.length?show(near[0]):empty()}catch(e){console.error(e);empty()}finally{$('refresh').disabled=false}}
+$('refresh').addEventListener('click',update);update();setInterval(update,REFRESH);
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));}
+})();
+</script>
+</body></html>
