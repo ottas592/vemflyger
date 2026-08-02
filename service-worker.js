@@ -1,4 +1,4 @@
-const CACHE = 'flight-wall-shell-v1';
+const CACHE = 'flight-wall-shell-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
