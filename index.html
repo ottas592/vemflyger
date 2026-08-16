@@ -93,7 +93,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background:rep
 </main>
 <script>
 (()=>{'use strict';
-const CENTER={lat:59.633810,lon:17.915602},MAX_KM=5,RADIUS_NM=2.7,REFRESH=15000;
+const CENTER={lat:59.633810,lon:17.915602},MAX_KM=5,RADIUS_NM=2.7,REFRESH=20000;
 const POSITION_API=`/api/aircraft?lat=${CENTER.lat}&lon=${CENTER.lon}&radiusKm=${MAX_KM}`;
 const $=id=>document.getElementById(id);let lastRouteKey='',currentAdsbCallsign='';
 function rad(v){return v*Math.PI/180}function dist(a,b,c,d){const R=6371.0088,x=rad(c-a),y=rad(d-b),q=Math.sin(x/2)**2+Math.cos(rad(a))*Math.cos(rad(c))*Math.sin(y/2)**2;return 2*R*Math.asin(Math.sqrt(q))}
