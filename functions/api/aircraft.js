@@ -1,50 +1,125 @@
-import { json, validNumber, fetchJson, aircraftList, aircraftKey } from './_shared.js';
-
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
-  const lat = validNumber(url.searchParams.get('lat'), -90, 90);
-  const lon = validNumber(url.searchParams.get('lon'), -180, 180);
-  const radiusKm = validNumber(url.searchParams.get('radiusKm') ?? '5', 0.1, 25);
 
-  if (lat === null || lon === null || radiusKm === null) {
-    return json({ error: 'Ogiltiga parametrar. Ange lat, lon och radiusKm.' }, 400);
+  const lat = Number(url.searchParams.get("lat"));
+  const lon = Number(url.searchParams.get("lon"));
+  const radiusKm = Number(url.searchParams.get("radiusKm") || 5);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return json(
+      { error: "lat and lon must be valid numbers" },
+      400
+    );
   }
 
-  const radiusNm = Math.max(1, Math.ceil(radiusKm / 1.852));
-  const sources = [
-    ['adsb.lol', `https://api.adsb.lol/v2/point/${lat}/${lon}/${radiusNm}`],
-    ['airplanes.live', `https://api.airplanes.live/v2/point/${lat}/${lon}/${radiusNm}`],
-  ];
+  if (!Number.isFinite(radiusKm) || radiusKm <= 0 || radiusKm > 50) {
+    return json(
+      { error: "radiusKm must be between 0 and 50" },
+      400
+    );
+  }
 
-  const results = await Promise.allSettled(
-    sources.map(([, endpoint]) => fetchJson(endpoint))
-  );
+  // Vi söker ganska brett hos ADSB.lol och gör sedan
+  // den exakta 5 km-kontrollen själva.
+  const searchRadiusNm = 25;
 
-  const merged = new Map();
-  const sourceStatus = {};
+  const apiUrl =
+    `https://api.adsb.lol/v2/closest/${lat}/${lon}/${searchRadiusNm}`;
 
-  results.forEach((result, index) => {
-    const sourceName = sources[index][0];
-    if (result.status === 'fulfilled') {
-      const list = aircraftList(result.value);
-      sourceStatus[sourceName] = { ok: true, count: list.length };
-      for (const item of list) {
-        const key = aircraftKey(item);
-        if (!key) continue;
-        const existing = merged.get(key);
-        merged.set(key, existing ? { ...existing, ...item } : item);
+  try {
+    const response = await fetch(apiUrl, {
+      headers: {
+        "User-Agent": "vemflyger/1.0"
       }
-    } else {
-      sourceStatus[sourceName] = {
-        ok: false,
-        error: String(result.reason?.message || result.reason),
-      };
+    });
+
+    if (!response.ok) {
+      return json(
+        {
+          ac: [],
+          source: "adsb.lol",
+          error: `${response.status} ${response.statusText}`
+        },
+        502
+      );
+    }
+
+    const data = await response.json();
+    const aircraft = Array.isArray(data.ac) ? data.ac : [];
+
+    const valid = aircraft
+      .filter(a =>
+        Number.isFinite(a.lat) &&
+        Number.isFinite(a.lon)
+      )
+      .map(a => ({
+        ...a,
+        _distanceKm: haversineKm(lat, lon, a.lat, a.lon)
+      }))
+      .sort((a, b) => a._distanceKm - b._distanceKm);
+
+    const nearest = valid[0];
+
+    if (!nearest || nearest._distanceKm > radiusKm) {
+      return json({
+        ac: [],
+        source: "adsb.lol",
+        nearestDistanceKm: nearest
+          ? round(nearest._distanceKm, 3)
+          : null,
+        radiusKm
+      });
+    }
+
+    return json({
+      ac: [nearest],
+      source: "adsb.lol",
+      nearestDistanceKm: round(nearest._distanceKm, 3),
+      radiusKm
+    });
+
+  } catch (error) {
+    return json(
+      {
+        ac: [],
+        source: "adsb.lol",
+        error: error instanceof Error
+          ? error.message
+          : String(error)
+      },
+      502
+    );
+  }
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371.0088;
+
+  const toRad = deg => deg * Math.PI / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+    Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) ** 2;
+
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function round(value, decimals) {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
+}
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store"
     }
   });
-
-  if (!Object.values(sourceStatus).some(status => status.ok)) {
-    return json({ error: 'Ingen positionskälla kunde nås.', sources: sourceStatus }, 502);
-  }
-
-  return json({ ac: [...merged.values()], sources: sourceStatus, radiusNm });
 }
